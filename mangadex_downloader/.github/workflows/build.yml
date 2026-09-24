@@ -1,0 +1,35 @@
+name: build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar Tk (solo Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Construir ejecutable
+        run: pyinstaller --windowed --name MangaDexDownloader ${{ runner.os != 'macOS' && '--onefile' || '' }} main.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MangaDexDownloader-${{ runner.os }}
+          path: dist/

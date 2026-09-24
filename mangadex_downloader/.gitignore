@@ -1,0 +1,23 @@
+# Python / Entornos virtuales
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+ENV/
+
+# Archivos de compilación y empaquetado (PyInstaller, setuptools, etc.)
+build/
+dist/
+*.egg-info/
+*.spec
+
+# Archivos de configuración de IDEs y editores
+.vscode/
+.idea/
+*.swp
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
