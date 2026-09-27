@@ -64,6 +64,33 @@ def search_manga(title):
         })
     return results
 
+def get_manga_by_id(manga_id):
+    endpoint = f"/manga/{manga_id}"
+    params = {"includes[]": "cover_art"}
+
+    print("\n" + "=" * 60)
+    print("[DEBUG PASO 1] Búsqueda directa por ID:")
+    print(f"  -> URL / Endpoint : {API_URL}{endpoint}")
+    print("=" * 60)
+
+    data = api_get(endpoint, params)
+    item = data.get("data")
+    if not item:
+        raise RuntimeError(f"No se encontró ningún manga con el ID '{manga_id}'.")
+
+    titles = item.get("attributes", {}).get("title", {})
+    display_title = (
+        titles.get("en")
+        or titles.get("ja-ro")
+        or next(iter(titles.values()), "Sin título")
+    )
+    print(f"  -> ID : {item.get('id')} | Título : {display_title}")
+    return {
+        "id": item.get("id"),
+        "title": display_title,
+        "attributes": item.get("attributes", {}),
+    }
+
 
 def get_chapters(manga_id, language):
     print(f"[Paso 2] Obteniendo lista de capítulos (Idioma: {language})...")

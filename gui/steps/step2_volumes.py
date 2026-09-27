@@ -1,6 +1,6 @@
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 
 from core.api import get_chapters
 from core.chapters import chapter_label, chapter_sort_key, group_by_volume
@@ -13,6 +13,8 @@ class VolumesStep(ttk.Frame):
         self.app = app
         self.chapters = []
         self.volumes = {}
+        self.custom_groups = []  # lista de (nombre, [capitulos])
+        self.mode = tk.StringVar(value="tomos")
         self._build()
 
     # ---------------------------------------------------------- UI
@@ -40,8 +42,25 @@ class VolumesStep(ttk.Frame):
         self.spinner = ttk.Progressbar(self.loading_frame, mode="indeterminate", length=220)
         self.spinner.pack(side="left", padx=5)
 
-        panes = ttk.PanedWindow(self, orient="horizontal")
-        panes.pack(fill="both", expand=True, pady=10)
+        # ---------------------------------------------------- selector de modo
+        self.mode_frame = ttk.LabelFrame(self, text="Modo de descarga")
+        self.mode_frame.pack(fill="x", pady=(5, 10))
+        ttk.Radiobutton(
+            self.mode_frame, text="Tomos establecidos (agrupados por MangaDex)",
+            variable=self.mode, value="tomos", command=self._on_mode_change,
+        ).pack(side="left", padx=10, pady=5)
+        ttk.Radiobutton(
+            self.mode_frame, text="Selección personalizada de capítulos",
+            variable=self.mode, value="personalizada", command=self._on_mode_change,
+        ).pack(side="left", padx=10, pady=5)
+
+        self.panes_container = ttk.Frame(self)
+        self.panes_container.pack(fill="both", expand=True, pady=5)
+
+        # ---------------------------------------------------- modo: tomos
+        self.frame_tomos = ttk.Frame(self.panes_container)
+        panes = ttk.PanedWindow(self.frame_tomos, orient="horizontal")
+        panes.pack(fill="both", expand=True)
 
         frame_vols = ttk.LabelFrame(panes, text="Tomos Disponibles (Multi-selección)")
         self.list_vols = tk.Listbox(frame_vols, selectmode=tk.EXTENDED, font=("Arial", 10))
@@ -54,6 +73,32 @@ class VolumesStep(ttk.Frame):
 
         panes.add(frame_vols, weight=1)
         panes.add(frame_caps, weight=1)
+
+        # ---------------------------------------------------- modo: personalizada
+        self.frame_custom = ttk.Frame(self.panes_container)
+        panes_c = ttk.PanedWindow(self.frame_custom, orient="horizontal")
+        panes_c.pack(fill="both", expand=True)
+
+        frame_all_caps = ttk.LabelFrame(panes_c, text="Todos los capítulos (Multi-selección)")
+        self.list_all_caps = tk.Listbox(frame_all_caps, selectmode=tk.EXTENDED, font=("Arial", 9))
+        self.list_all_caps.pack(fill="both", expand=True, padx=5, pady=(5, 0))
+        ttk.Button(
+            frame_all_caps, text="+ Crear grupo con la selección",
+            command=self._add_custom_group,
+        ).pack(fill="x", padx=5, pady=5)
+
+        frame_groups = ttk.LabelFrame(panes_c, text="Grupos personalizados a descargar")
+        self.list_groups = tk.Listbox(frame_groups, font=("Arial", 9))
+        self.list_groups.pack(fill="both", expand=True, padx=5, pady=(5, 0))
+        ttk.Button(
+            frame_groups, text="Eliminar grupo seleccionado",
+            command=self._remove_custom_group,
+        ).pack(fill="x", padx=5, pady=5)
+
+        panes_c.add(frame_all_caps, weight=1)
+        panes_c.add(frame_groups, weight=1)
+
+        self.frame_tomos.pack(fill="both", expand=True)
 
         nav = ttk.Frame(self)
         nav.pack(fill="x", pady=10)
@@ -71,6 +116,13 @@ class VolumesStep(ttk.Frame):
     def get_selected_keys(self):
         keys = list(self.volumes.keys())
         return [keys[i] for i in self.list_vols.curselection()]
+
+    def get_download_volumes(self):
+        """Devuelve {nombre: [capitulos]} según el modo activo."""
+        if self.mode.get() == "personalizada":
+            return {name: caps for name, caps in self.custom_groups}
+        keys = self.get_selected_keys()
+        return {k: self.volumes[k] for k in keys}
 
     # ---------------------------------------------------------- carga
     def load(self):
@@ -110,6 +162,13 @@ class VolumesStep(ttk.Frame):
         for vol_name, caps in self.volumes.items():
             self.list_vols.insert(tk.END, f"Tomo {vol_name} ({len(caps)} caps)")
 
+        self.custom_groups = []
+        self.list_all_caps.delete(0, tk.END)
+        self.list_groups.delete(0, tk.END)
+        for c in self.chapters:
+            self.list_all_caps.insert(tk.END, chapter_label(c))
+        self._update_next_state()
+
     def _finish_loading(self):
         self.spinner.stop()
         self.loading_frame.pack_forget()
@@ -121,11 +180,62 @@ class VolumesStep(ttk.Frame):
         keys = self.get_selected_keys()
         self.list_caps.delete(0, tk.END)
 
-        if not keys:
-            self.btn_next.config(state="disabled")
-            return
-
-        self.btn_next.config(state="normal")
         for key in keys:
             for c in self.volumes[key]:
                 self.list_caps.insert(tk.END, chapter_label(c))
+
+        self._update_next_state()
+
+    # ---------------------------------------------------------- modo
+    def _on_mode_change(self):
+        if self.mode.get() == "personalizada":
+            self.frame_tomos.pack_forget()
+            self.frame_custom.pack(fill="both", expand=True)
+        else:
+            self.frame_custom.pack_forget()
+            self.frame_tomos.pack(fill="both", expand=True)
+        self._update_next_state()
+
+    def _update_next_state(self):
+        if self.mode.get() == "personalizada":
+            enabled = len(self.custom_groups) > 0
+        else:
+            enabled = len(self.get_selected_keys()) > 0
+        self.btn_next.config(state="normal" if enabled else "disabled")
+
+    # ---------------------------------------------------------- grupos personalizados
+    def _add_custom_group(self):
+        indices = self.list_all_caps.curselection()
+        if not indices:
+            messagebox.showwarning("Sin selección", "Selecciona al menos un capítulo de la lista.")
+            return
+
+        selected_caps = [self.chapters[i] for i in indices]
+
+        nums = [c["attributes"].get("chapter") for c in selected_caps if c["attributes"].get("chapter")]
+        if nums:
+            default_name = f"Cap {nums[0]}-{nums[-1]}" if nums[0] != nums[-1] else f"Cap {nums[0]}"
+        else:
+            default_name = f"Selección {len(self.custom_groups) + 1}"
+
+        name = simpledialog.askstring(
+            "Nombre del grupo",
+            f"Vas a agrupar {len(selected_caps)} capítulo(s) en un tomo.\nDale un nombre:",
+            initialvalue=default_name,
+            parent=self,
+        )
+        if not name:
+            return
+
+        self.custom_groups.append((name, selected_caps))
+        self.list_groups.insert(tk.END, f"{name} ({len(selected_caps)} caps)")
+        self._update_next_state()
+
+    def _remove_custom_group(self):
+        sel = self.list_groups.curselection()
+        if not sel:
+            return
+        idx = sel[0]
+        del self.custom_groups[idx]
+        self.list_groups.delete(idx)
+        self._update_next_state()
