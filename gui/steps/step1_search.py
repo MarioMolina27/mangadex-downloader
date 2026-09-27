@@ -1,9 +1,13 @@
+import re
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from core.api import search_manga
+from core.api import get_manga_by_id, search_manga
 
+UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
 
 class SearchStep(ttk.Frame):
     def __init__(self, parent, app):
@@ -18,7 +22,7 @@ class SearchStep(ttk.Frame):
         search_box = ttk.Frame(self)
         search_box.pack(fill="x", pady=5)
 
-        ttk.Label(search_box, text="Título:").pack(side="left", padx=(0, 5))
+        ttk.Label(search_box, text="Título o ID de MangaDex:").pack(side="left", padx=(0, 5))
         self.entry_search = ttk.Entry(search_box, font=("Arial", 10))
         self.entry_search.pack(side="left", fill="x", expand=True, padx=5)
         self.entry_search.bind("<Return>", lambda e: self.run_search())
@@ -46,7 +50,10 @@ class SearchStep(ttk.Frame):
 
         def worker():
             try:
-                results = search_manga(query)
+                if UUID_RE.match(query):
+                    results = [get_manga_by_id(query)]
+                else:
+                    results = search_manga(query)
                 self.app.ui(self._show_results, results)
             except Exception as e:
                 self.app.ui(messagebox.showerror, "Error", str(e))

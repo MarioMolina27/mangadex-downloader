@@ -19,7 +19,7 @@ class ProgressStep(ttk.Frame):
         self.progress = ttk.Progressbar(self, mode="determinate")
         self.progress.pack(fill="x", pady=10)
 
-        ttk.Label(self, text="Registro de Actividad (Prints en Vivo):").pack(anchor="w", pady=(10, 2))
+        ttk.Label(self, text="Registro de Actividad:").pack(anchor="w", pady=(10, 2))
         self.log_text = scrolledtext.ScrolledText(self, height=15, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 9))
         self.log_text.pack(fill="both", expand=True, pady=5)
 

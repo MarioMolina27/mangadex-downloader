@@ -83,12 +83,11 @@ class MangaWizardApp:
         self.step_volumes.load()
 
     def start_download(self):
-        keys = self.step_volumes.get_selected_keys()
-        if not keys:
+        volumes = self.step_volumes.get_download_volumes()
+        if not volumes:
             return
 
         cfg = self.step_config
-        volumes = {k: self.step_volumes.volumes[k] for k in keys}
 
         self.show_step(4)
         self.step_progress.start(
